@@ -18,7 +18,7 @@ class JobRequest(BaseModel):
 
 @app.get("/")
 def health():
-    return {"status", "ok"}
+    return {"status": "ok"}
 
 @app.post("/jobs", status_code=202)
 def submit(req: JobRequest):
