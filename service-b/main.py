@@ -1,11 +1,16 @@
 import base64
 import json
 import logging
+import os
+import time
 
+import httpx
 from fastapi import FastAPI, Request, Response
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+RESEARCH_API_URL = os.environ["RESEARCH_API_URL"]
 
 app = FastAPI()
 
@@ -38,8 +43,29 @@ async def handle_push(request: Request):
         return Response(status_code=204)
 
     logger.info(
-        "RECEIVED message_id=%s attempt=%s topic=%r n_urls=%s",
-        message_id, attempt, payload.get("topic"), payload.get("n_urls")
+        "START message_id=%s attempt=%s topic=%r",
+        message_id, attempt, payload.get("topic")
+    )
+
+    start = time.monotonic()
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(f"{RESEARCH_API_URL}/research", json=payload)
+            response.raise_for_status()
+            result = response.json()
+    except Exception as e:
+        elapsed = time.monotonic() - start
+        logger.error(
+            "FAILED message_id=%s attempt=%s after %.1fs (%s)",
+            message_id, attempt, elapsed, type(e).__name__
+        )
+        return Response(status_code=500)
+
+    elapsed = time.monotonic() - start
+    logger.info(
+        "DONE message_id=%s attempt=%s in %.1fs report_chars=%s sources=%s",
+        message_id, attempt, elapsed,
+        len(result.get("report", "")), len(result.get("urls", []))
     )
 
     return Response(status_code=204)
